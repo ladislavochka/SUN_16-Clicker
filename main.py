@@ -8,6 +8,7 @@ from kivy.uix.image import Image
 from kivy import platform
 from kivy.properties import NumericProperty
 from kivy.clock import Clock
+from kivy.animation import Animation #add
 
 class Menu(Screen):
    def __init__(self, **kw):
@@ -31,8 +32,17 @@ class Settings(Screen):
    def go_menu(self, *args):
        self.manager.current = "menu"
        self.manager.transition.direction = "down"
-
-class Fish(Image):
+#add
+class RotateImage(Image):
+    ...
+#add
+class Fish(RotateImage):#coorected
+   #add
+   anim_play = False
+   interaction_block = True
+   COEF_MULT = 1.5
+   angle = NumericProperty(0)
+   #add
    fish_current = None
    fish_index = 0
    hp_current = None
@@ -45,27 +55,54 @@ class Fish(Image):
        self.fish_current = app.LEVELS[app.LEVEL][self.fish_index]
        self.source = app.FISHES[self.fish_current]['source']
        self.hp_current = app.FISHES[self.fish_current]['hp']
+       self.swim() #add
+   #add
+   def swim (self):
+       self/pos = (self.GAME_SCREEN.x - self.width, self.GAME_SCREEN.height/2)
        self.opacity = 1
-
+       swim = Animation(x=self.GAME_SCREEN.width / 2 -self.width / 2, duration=1)
+       swim.start(self)
+       swim.bind(on_complete=lambda w, a: setattr(self, 'interaction_block', False))
+   #add
    def defeated(self):
-       self.opacity = 0
-
+   #add
+       self.interaction_block = True
+       anim = Animation(angle=self.angle + 360 , d=1, t = "in_cubic")
+       old_size = self.size.copy()
+       old_pos = self.pos.copy()
+       new_size = (self.size[0] * self.COEF_MULT  * 3, self.size[1] * self.COEF_MULT *3)
+       new_pos = (self.pos[0] - (new_size[0] - old_size[0]) / 2, self.pos[1] - (new_size[1] - old_size[1]) / 2)   
+       anim &= Animation(size=(new_size), t = "in_out_bounce") + Animation(size=(old_size), duration=0)
+       anim &= Animation(pos=(new_pos) t = "in_out_bounce") + Animation(pos=(old_pos), duration=0)
+       anim &= Animation(opacity=0)
+       anim.start(self)
+    #add
    def on_touch_down(self, touch):
-       if not self.collide_point(*touch.pos) or not self.opacity:
+       if not self.collide_point(*touch.pos) or self.anim_play or self.interaction_block:#corrected
            return
-       self.hp_current -= 1
-       self.GAME_SCREEN.score += 1
-       if self.hp_current <= 0:
-           self.defeated()
-           if len(app.LEVELS[app.LEVEL]) > self.fish_index + 1:
-               self.fish_index += 1
-               Clock.schedule_once(self.new_fish, 1.2)
+       #add
+       if not self.anim_play and not self.interaction_block:
+           self.hp_current -= 1
+           self.GAME_SCREEN.score += 1
+           if self.hp_current > 0:
+               old_size = self.size.copy()
+               old_pos = self.pos.copy()
+               new_size = (self.size[0] * self.COEF_MULT, self.size[1] * self.COEF_MULT)
+               new_pos = (self.pos[0] - (new_size[0] - old_size[0]) / 2, self.pos[1] - (new_size[1] - old_size[1]) / 2)
+               zoom_amim = Animation(size = (new_size), duration = 0.05) + Animation(size=(old_size), duration=0.05)
+               zoom_amim &= Animation(pos=(new_pos), duration=0.05) + Animation(pos=(old_pos), duration=0.05)
+               zoom_amim.start(self)
+               self.anim_play = True
+               zoom_amim.bind(on_complete=lambda w, a: setattr(self, 'anim_play', False))
            else:
-               Clock.schedule_once(self.GAME_SCREEN.level_complete, 1.2)
-               self.fish_index = 0
-                         
-       return super().on_touch_down(touch)
-
+               self.defeated()
+               if len(app.LEVELS[app.LEVEL]) > self.fish_index + 1:
+                   self.fish_index += 1
+                   Clock.schedule_once(self.new_fish, 1.2)
+               else:
+                   Clock.schedule_once(self.GAME_SCREEN.level_complete, 1.2)
+               super().on_touch_down(touch)
+        #add
 class Game(Screen):
    score = NumericProperty(0)
    def on_pre_enter(self, *args):
